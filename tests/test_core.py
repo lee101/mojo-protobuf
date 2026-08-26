@@ -133,6 +133,18 @@ def test_scan_fields_returns_zero_copy_views():
     assert field.as_bytes() == b"abz"
 
 
+def test_scanned_field_retains_record_interface_with_lazy_view():
+    data = bytearray(upstream_encoder.TagBytes(1, 2) + b"\x03abc")
+    field = mpb.scan_fields(data)[0]
+    assert field._value is None
+    data[-1] = ord("z")
+    assert tuple(field) == (1, 2, memoryview(data)[2:5])
+    assert field.value is field.value
+    assert field[0:2] == (1, 2)
+    assert field._asdict() == {"number": 1, "wire_type": 2, "value": field.value}
+    assert field._replace(number=2) == (2, 2, field.value)
+
+
 def test_scan_fields_uses_byte_offsets_for_typed_buffers():
     data = np.frombuffer(b"\x0a\x02ab", dtype=np.uint16)
     field = mpb.scan_fields(data)[0]

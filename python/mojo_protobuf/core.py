@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from numbers import Integral
 import struct
-from typing import NamedTuple
 
 import numpy as np
 from google.protobuf import message
@@ -186,10 +186,89 @@ def _decode_one(buffer, pos, bits=64, signed=False):
     raise message.DecodeError("Too many bytes when decoding varint.")
 
 
-class Field(NamedTuple):
-    number: int
-    wire_type: int
-    value: memoryview
+class Field(Sequence):
+    __slots__ = ("_number", "_wire_type", "_raw", "_offset", "_length", "_value")
+    __match_args__ = ("number", "wire_type", "value")
+    _fields = ("number", "wire_type", "value")
+
+    def __init__(self, number, wire_type, value, offset=None, length=None):
+        self._number = number
+        self._wire_type = wire_type
+        if offset is None:
+            self._raw = value
+            self._offset = 0
+            self._length = len(value)
+            self._value = value
+        else:
+            self._raw = value
+            self._offset = offset
+            self._length = length
+            self._value = None
+
+    @property
+    def number(self):
+        return self._number
+
+    @property
+    def wire_type(self):
+        return self._wire_type
+
+    @property
+    def value(self):
+        if self._value is None:
+            self._value = self._raw[self._offset:self._offset + self._length]
+        return self._value
+
+    def __len__(self):
+        return 3
+
+    def __iter__(self):
+        yield self.number
+        yield self.wire_type
+        yield self.value
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return (self.number, self.wire_type, self.value)[index]
+        if index == 0 or index == -3:
+            return self.number
+        if index == 1 or index == -2:
+            return self.wire_type
+        if index == 2 or index == -1:
+            return self.value
+        raise IndexError("Field index out of range")
+
+    def __repr__(self):
+        return (
+            f"Field(number={self.number!r}, wire_type={self.wire_type!r}, "
+            f"value={self.value!r})"
+        )
+
+    def __eq__(self, other):
+        if isinstance(other, Field):
+            return tuple(self) == tuple(other)
+        if isinstance(other, tuple):
+            return tuple(self) == other
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(tuple(self))
+
+    def _asdict(self):
+        return dict(zip(self._fields, self))
+
+    def _replace(self, **changes):
+        unknown = changes.keys() - self._fields
+        if unknown:
+            raise ValueError(f"Got unexpected field names: {unknown!r}")
+        return Field(*(changes.get(name, value) for name, value in zip(self._fields, self)))
+
+    @classmethod
+    def _make(cls, iterable):
+        values = tuple(iterable)
+        if len(values) != 3:
+            raise TypeError(f"Expected 3 arguments, got {len(values)}")
+        return cls(*values)
 
     def as_varint(self, *, signed=False, zigzag=False, bits=64):
         value, pos = _decode_one(self.value, 0, bits, signed)
@@ -238,8 +317,7 @@ def scan_fields(data) -> list[Field]:
         offsets[:status].tolist(),
         lengths[:status].tolist(),
     )
-    field_new = tuple.__new__
     return [
-        field_new(Field, (number, wire_type, raw[offset:offset + length]))
+        Field(number, wire_type, raw, offset, length)
         for number, wire_type, offset, length in records
     ]

@@ -87,15 +87,15 @@ runs. A ratio above 1 means mojo-protobuf was faster.
 
 | case | mojo-protobuf | reference | speedup | comparison |
 |---|---:|---:|---:|---|
-| encode packed uint64 (1M) | 11.44 ms | 1701.12 ms | 148.74x | Python encoder |
-| encode packed sint64 (1M) | 6.99 ms | 2613.23 ms | 373.76x | Python encoder |
-| decode packed uint64 (1M) | 75.65 ms | 1334.25 ms | 17.64x | Python decoder |
-| serialize packed message (1M) | 16.31 ms | 18.40 ms | 1.13x | upb runtime |
-| scan 250k varint fields | 450.73 ms | 288.44 ms | 0.64x | Python reference |
+| encode packed uint64 (1M) | 8.79 ms | 1711.49 ms | 194.68x | Python encoder |
+| encode packed sint64 (1M) | 7.14 ms | 2069.21 ms | 289.74x | Python encoder |
+| decode packed uint64 (1M) | 52.26 ms | 1029.19 ms | 19.69x | Python decoder |
+| serialize packed message (1M) | 10.71 ms | 16.85 ms | 1.57x | upb runtime |
+| scan 250k varint fields | 182.61 ms | 285.39 ms | 1.56x | Python reference |
 
-Materializing 250,000 Python `Field` records dominates the scanner benchmark;
-in this run the tuple-producing Python reference was faster. Field payload
-views still avoid copying when the input is a contiguous buffer.
+Materializing 250,000 Python `Field` records dominates the scanner benchmark.
+Payload memoryviews are created lazily and cached on first access, avoiding an
+eager allocation per field while keeping contiguous inputs zero-copy.
 
 There is no GPU path. Protobuf wire kernels have low arithmetic intensity and
 data-dependent field boundaries, so device transfers and launch overhead cost
